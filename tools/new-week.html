@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Add a week of teaching</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400..700&family=Literata:ital,opsz,wght@0,7..72,300..800;1,7..72,300..800&display=swap">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+<script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body data-page="teaching">
+<div class="stripe" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+<div class="wrap" style="max-width:860px">
+  <div class="pagehead" style="padding-bottom:20px">
+    <h1>Add a week of teaching</h1>
+    <p>Fill in the form, copy the result, and paste it into data.js. Nothing on this page is saved or sent anywhere.</p>
+  </div>
+
+  <ol class="what" style="padding-left:1.2em;list-style:decimal;display:flex;flex-direction:column;gap:6px;margin-bottom:28px">
+    <li>Upload your PDF files to the folder named just above the file list, on GitHub (Add file, then Upload files).</li>
+    <li>Fill in the form below. The file name is just the name of the PDF, for example <code>week05-notes.pdf</code>.</li>
+    <li>Copy the result and paste it in data.js, on the line after <code>weeks: [</code> of the same course.</li>
+  </ol>
+
+  <div class="formgrid">
+    <label>Course <select class="field" id="course"></select></label>
+    <label>Week number <input class="field" type="number" id="n" min="1"></label>
+    <label>Date of the lecture <input class="field" type="date" id="date"></label>
+  </div>
+  <div class="formgrid"><label style="grid-column:1/-1">Topic of the week <input class="field" type="text" id="topic" placeholder="Spectral theorem"></label></div>
+
+  <p class="muted" id="folderNote" style="font:400 .95rem var(--sans);margin-bottom:14px"></p>
+  <div id="rows"></div>
+  <button type="button" class="toggle" id="add">Add another file</button>
+
+  <h2 style="font:600 1.3rem var(--serif);margin-top:34px">Result</h2>
+  <pre class="out" id="out" tabindex="0"></pre>
+  <button type="button" class="btn" id="copy">Copy result</button>
+  <p class="muted" style="font:400 .92rem var(--sans);margin-top:16px">A file with a release date shows as “available” with no link until that day, which is useful for solutions.</p>
+</div>
+
+<script src="../data.js"></script>
+<script>
+(function () {
+  var S = SITE, $ = function (id) { return document.getElementById(id); };
+  var KINDS = ["Lecture", "Slides", "Exercises", "Solutions", "Lab", "Syllabus", "Exam", "Reading"];
+  var presets = [["Lecture", "Chapter notes"], ["Exercises", "Exercise sheet"], ["Solutions", "Solutions"]];
+  var iso = function (d) { var m = d.getMonth() + 1, day = d.getDate(); return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day; };
+  var q = function (s) { return JSON.stringify(String(s)); };
+
+  $("course").innerHTML = S.courses.map(function (c, i) { return '<option value="' + i + '">' + c.code + ", " + c.title + "</option>"; }).join("");
+  $("date").value = iso(new Date());
+
+  function course() { return S.courses[Number($("course").value)]; }
+  function folder() { var c = course(); return (c.folder || "files/" + c.id).replace(/\/$/, ""); }
+  function nextWeek() { return Math.max.apply(null, [0].concat(course().weeks.map(function (w) { return w.n; }))) + 1; }
+
+  function addRow(kind, label) {
+    var d = document.createElement("div"); d.className = "filerow";
+    d.innerHTML = '<select class="field k" aria-label="Kind">' + KINDS.map(function (k) { return "<option" + (k === kind ? " selected" : "") + ">" + k + "</option>"; }).join("") + "</select>" +
+      '<input class="field l" type="text" aria-label="Label shown on the site" placeholder="Label shown on the site" value="' + (label || "") + '">' +
+      '<input class="field f" type="text" aria-label="File name" placeholder="File name, for example week05-notes.pdf">' +
+      '<input class="field r" type="date" aria-label="Release date (optional)" title="Release date (optional)">';
+    $("rows").appendChild(d);
+  }
+  function refresh() {
+    $("folderNote").innerHTML = "Upload this week's PDF files to the folder <strong>" + folder() + "/</strong> on GitHub.";
+    var rows = Array.prototype.slice.call(document.querySelectorAll(".filerow")), lines = [];
+    rows.forEach(function (r) {
+      var kind = r.querySelector(".k").value, label = r.querySelector(".l").value.trim(), file = r.querySelector(".f").value.trim(), rel = r.querySelector(".r").value;
+      if (!label && !file) return;
+      var url = file ? folder() + "/" + file : "";
+      lines.push("    { kind: " + q(kind) + ", label: " + q(label || kind) + ", url: " + q(url) + (rel ? ", release: " + q(rel) : "") + " }");
+    });
+    var topic = $("topic").value.trim() || "Topic of the week";
+    $("out").textContent = "{ n: " + ($("n").value || 1) + ", date: " + q($("date").value) + ", topic: " + q(topic) + ", files: [\n" + lines.join(",\n") + "\n  ] },";
+  }
+  presets.forEach(function (p) { addRow(p[0], p[1]); });
+  $("n").value = nextWeek();
+  $("course").addEventListener("change", function () { $("n").value = nextWeek(); refresh(); });
+  $("add").addEventListener("click", function () { addRow("Lecture", ""); refresh(); });
+  document.addEventListener("input", refresh);
+  $("copy").addEventListener("click", function () {
+    var b = $("copy"), t = $("out").textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { b.textContent = "Copied"; }, function () {
+      var r = document.createRange(); r.selectNodeContents($("out")); var s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "Selected, press Ctrl+C";
+    });
+    setTimeout(function () { b.textContent = "Copy result"; }, 1800);
+  });
+  refresh();
+})();
+</script>
+</body>
+</html>
